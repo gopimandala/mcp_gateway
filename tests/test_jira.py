@@ -7,7 +7,7 @@ import asyncio
 import httpx
 import json
 
-target_url = "http://127.0.0.1:9050/mcp"
+target_url = "http://127.0.0.1:8020/mcp"
 
 jira_issue_key = "KAN-61"
 
