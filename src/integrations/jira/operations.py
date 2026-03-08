@@ -2,6 +2,7 @@ JIRA_OPERATIONS = {
     "get_issue": {
         "method": "GET",
         "path": "/rest/api/2/issue/{issue_key}",
+        "wrapper_path": "/api/jira/issue",         # used by brain
         "trace_name": "Jira API: Fetch Issue",
         "description": "Fetch a Jira issue by key"
     },
@@ -9,6 +10,7 @@ JIRA_OPERATIONS = {
     "add_comment": {
         "method": "POST",
         "path": "/rest/api/3/issue/{issue_key}/comment",
+        "wrapper_path": "/api/jira/comment",         # used by brain
         "trace_name": "jira_add_comment",
         "description": "Add a comment to a Jira issue"
     }
