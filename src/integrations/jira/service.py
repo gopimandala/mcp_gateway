@@ -14,3 +14,31 @@ class JiraService:
         )
 
         return JiraIssue(**raw)
+
+    async def add_comment(self, issue_key: str, comment: str):
+
+        body = {
+            "body": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": comment
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        result = await self.client.execute(
+            "add_comment",
+            issue_key=issue_key,
+            body=body
+        )
+
+        return result
