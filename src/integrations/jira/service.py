@@ -1,7 +1,8 @@
 import re
+import json
 from .schemas import JiraIssue
 from .client import JiraClient
-from shared.tracing_utils import secure_trace
+from shared.tracing_utils import secure_trace, scrub_pii
 
 class JiraService:
     def __init__(self, client: JiraClient):
@@ -19,9 +20,16 @@ class JiraService:
         
         # 3. Data Transformation
         fields = data.get("fields", {})
-        return JiraIssue(
+
+        result = JiraIssue(
             key=issue_key,
             summary=fields.get("summary", "N/A"),
             status=fields.get("status", {}).get("name", "Unknown"),
             description=fields.get("description") or "No description."
         )
+
+        # 4. Mask sensitive tokens in output using existing util
+        masked_dict = json.loads(scrub_pii(json.dumps(result.model_dump())))
+
+        # convert back to model
+        return JiraIssue(**masked_dict)
