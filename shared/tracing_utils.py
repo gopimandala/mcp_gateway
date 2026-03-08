@@ -44,11 +44,12 @@ def redact_output(output):
         }
     return "[REDACTED]"
 
-def secure_trace(name: str):
+def secure_trace(name: str, metadata: dict | None = None):
     """Decorator to apply centralized security to any traceable function."""
     return traceable(
         name=name,
         run_type="tool",
+        metadata=metadata or {},
         process_inputs=mask_sensitive_data,
         process_outputs=redact_output
     )
