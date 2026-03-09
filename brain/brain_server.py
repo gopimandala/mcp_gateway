@@ -13,6 +13,9 @@ load_dotenv()
 OPENAI_KEY = os.getenv("OPENAI_KEY")
 client = OpenAI(api_key=OPENAI_KEY)
 
+# --- guardrail config ---
+GUARDRAIL_URL = "http://localhost:9090/check"
+
 # --- MCP/Kong config ---
 MCP_GATEWAY_URL = "http://localhost:8000"
 TOOLS_URL = f"{MCP_GATEWAY_URL}/api/jira/tools"
@@ -23,6 +26,18 @@ app = FastAPI(title="Brain Server")
 # --- request model ---
 class BrainRequest(BaseModel):
     user_request: str
+
+# --- guardrail check ---
+async def check_guardrail(text: str):
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            GUARDRAIL_URL,
+            json={"text": text}
+        ) as resp:
+            if resp.status != 200:
+                raise Exception("Guardrail service error")
+
+            return await resp.json()
 
 # --- fetch tools dynamically ---
 async def fetch_tools():
@@ -97,6 +112,21 @@ async def execute_plan(plan, tools_list):
 # --- FastAPI endpoint ---
 @app.post("/run_brain")
 async def run_brain_endpoint(req: BrainRequest):
+
+    # --- guardrail check ---
+    guardrail_result = await check_guardrail(req.user_request)
+
+    if not guardrail_result["safe"]:
+        return {
+            "plan": [],
+            "execution_results": [
+                {
+                    "tool": "guardrail",
+                    "output": "Request blocked due to unsafe content",
+                    "scores": guardrail_result["scores"]
+                }
+            ]
+        }
 
     plan, tools, message = await run_brain(req.user_request)
     # If LLM returned a normal message (guardrail/refusal)
