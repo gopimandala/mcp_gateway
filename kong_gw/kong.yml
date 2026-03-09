@@ -1,0 +1,40 @@
+_format_version: "3.0"
+
+services:
+  - name: my-service
+    url: http://httpbin.org
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 5
+          hour: 100
+
+  - name: jira-service
+    url: http://172.17.0.1:8020
+    plugins:
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 1
+
+  - name: jira-proxy-service
+    url: http://172.17.0.1:8021
+    # No plugins needed for path rewriting now
+
+routes:
+  - name: my-route
+    service: my-service
+    paths:
+      - /my-api
+
+  - name: jira-route
+    service: jira-service
+    paths:
+      - /jira
+    strip_path: true
+
+  - name: jira-proxy-route
+    service: jira-proxy-service
+    paths:
+      - /api/jira
+    strip_path: false      
+    preserve_host: true

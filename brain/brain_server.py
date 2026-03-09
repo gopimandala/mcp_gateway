@@ -87,10 +87,8 @@ async def execute_plan(plan, tools_list):
             method = "POST"
 
             async with session.request(method, url, json=input_data) as resp:
-                try:
-                    result = await resp.json()
-                except Exception:
-                    result = await resp.text()
+                # Force parsing as JSON, no fallback to text
+                result = await resp.json(content_type=None)  # ignore content-type issues
                 print(f"Executed {tool_name} ({method} {url}):", result)
                 results.append(result)
     
@@ -115,6 +113,8 @@ async def run_brain_endpoint(req: BrainRequest):
             "input": step["input"],
             "output": mcp_results[i] if i < len(mcp_results) else {"error": "Result not found"}
         })
+    
+    print("Brain server step output:", mcp_results[i])
 
     return {"plan": plan, "execution_results": results}
 

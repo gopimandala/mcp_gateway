@@ -33,3 +33,7 @@ async def shutdown_event():
 
 jira_router = create_jira_router(lambda: services.get("jira"))
 app.include_router(jira_router, prefix="/api/jira", tags=["jira"])
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("src.main_http_wrapper:app", host="0.0.0.0", port=8021, reload=True)
