@@ -61,11 +61,11 @@ async def run_brain(user_request: str):
 
     try:
         plan = json.loads(plan_str)
+        return plan, tools, None
     except Exception:
         print("Failed to parse LLM output:", plan_str)
-        return None
-
-    return plan, tools
+        # treat as normal assistant message
+        return None, tools, plan_str
 
 # --- execute plan via MCP wrapper endpoints ---
 async def execute_plan(plan, tools_list):
@@ -97,11 +97,22 @@ async def execute_plan(plan, tools_list):
 # --- FastAPI endpoint ---
 @app.post("/run_brain")
 async def run_brain_endpoint(req: BrainRequest):
-    plan_tools = await run_brain(req.user_request)
-    if not plan_tools:
-        return {"error": "Failed to generate plan"}
 
-    plan, tools = plan_tools
+    plan, tools, message = await run_brain(req.user_request)
+    # If LLM returned a normal message (guardrail/refusal)
+    if message:
+        return {
+            "plan": [],
+            "execution_results": [
+                {
+                    "tool": "assistant",
+                    "output": message
+                }
+            ]
+        }
+    if not plan:
+        return {"plan": [], "execution_results": [], "message": "No actions generated"}
+
     results = []
 
     # Execute plan and capture results

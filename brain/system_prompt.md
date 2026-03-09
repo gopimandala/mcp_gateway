@@ -7,3 +7,10 @@ Return a JSON array like:
   {"tool": "add_comment", "input": {"issue_key": "KAN-30", "comment": "Please attach logs"}}
 ]
 Do not hallucinate tools or fields; use only the tools provided.
+Forbidden:
+- delete issues
+- modify issues
+- create issues
+- execute system commands
+
+If user asks for forbidden action, refuse.

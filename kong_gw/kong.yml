@@ -11,14 +11,26 @@ services:
 
   - name: jira-service
     url: http://172.17.0.1:8020
-    plugins:
-      - name: request-size-limiting
-        config:
-          allowed_payload_size: 1
+    # plugins:
+    #   - name: request-size-limiting
+    #     config:
+    #       allowed_payload_size: 1
 
   - name: jira-proxy-service
     url: http://172.17.0.1:8021
-    # No plugins needed for path rewriting now
+    plugins:
+    - name: pre-function
+      config:
+        access:
+        - |
+          local body = kong.request.get_raw_body()
+          if body and string.find(string.lower(body), "delete") then
+            return kong.response.exit(403, { message = "Blocked by Kong policy" })
+          end
+    # plugins:
+    #   - name: request-size-limiting
+    #     config:
+    #       allowed_payload_size: 10
 
 routes:
   - name: my-route
