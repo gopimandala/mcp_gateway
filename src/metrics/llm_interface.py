@@ -27,45 +27,92 @@ def get_table_schema(table_name):
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
         
+        # Handle schema-qualified table names
+        if '.' in table_name:
+            schema, table = table_name.split('.', 1)
+        else:
+            schema = 'public'
+            table = table_name
+        
         cursor.execute("""
             SELECT column_name, data_type, is_nullable, column_default
             FROM information_schema.columns 
-            WHERE table_name = %s 
+            WHERE table_schema = %s AND table_name = %s 
             ORDER BY ordinal_position
-        """, (table_name,))
+        """, (schema, table))
         
         columns = cursor.fetchall()
-        schema = f"{table_name}:\n"
+        
+        # If no columns found, table doesn't exist or is empty
+        if not columns:
+            cursor.close()
+            conn.close()
+            return ""
+        
+        schema_output = f"{table_name}:\n"
         for col in columns:
             nullable = "NULL" if col[2] == "YES" else "NOT NULL"
             default = f" DEFAULT {col[3]}" if col[3] else ""
-            schema += f"  - {col[0]}: {col[1]} {nullable}{default}\n"
+            schema_output += f"  - {col[0]}: {col[1]} {nullable}{default}\n"
         
         cursor.close()
         conn.close()
-        return schema
+        return schema_output
         
     except Exception as e:
         return f"Error fetching schema for {table_name}: {e}"
+
+def get_tables_by_domain():
+    """Get tables organized by domain from database schemas"""
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        # Get all schemas and their tables
+        cursor.execute("""
+            SELECT table_schema, table_name 
+            FROM information_schema.tables 
+            WHERE table_schema IN ('jira', 'servicenow') 
+            AND table_type = 'BASE TABLE'
+            ORDER BY table_schema, table_name
+        """)
+        schema_tables = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        # Organize by schema (domain)
+        domains = {}
+        for schema, table_name in schema_tables:
+            if schema not in domains:
+                domains[schema] = []
+            domains[schema].append(f"{schema}.{table_name}")
+        
+        return domains
+        
+    except Exception as e:
+        print(f"❌ Error: Schema tables not found. Please run setup_database.py first.")
+        print(f"   Details: {e}")
+        return {}
 
 def build_schema_context(user_query):
     """Build schema context based on intent checker classification"""
     intent_checker = IntentChecker()
     domain = intent_checker.classify_domain(user_query)
     
+    # Get tables organized by domain
+    table_domains = get_tables_by_domain()
+    
     schema_context = ""
     
-    if domain in ["jira", "both"]:
+    if domain in ["jira", "both"] and "jira" in table_domains:
         schema_context += "\n🔷 Jira Tables:\n"
-        schema_context += get_table_schema('jira_issues')
-        schema_context += get_table_schema('jira_projects')
-        schema_context += get_table_schema('jira_users')
+        for table in table_domains["jira"]:
+            schema_context += get_table_schema(table)
     
-    if domain in ["servicenow", "both"]:
+    if domain in ["servicenow", "both"] and "servicenow" in table_domains:
         schema_context += "\n❄️ ServiceNow Tables:\n"
-        schema_context += get_table_schema('sn_incidents')
-        schema_context += get_table_schema('sn_groups')
-        schema_context += get_table_schema('sn_users')
+        for table in table_domains["servicenow"]:
+            schema_context += get_table_schema(table)
     
     return schema_context
 
@@ -103,6 +150,9 @@ class OpenAIProvider(LLMProvider):
                 schema_context=schema_context,
                 prompt=prompt
             )
+
+            print("\nSystem prompt:", system_prompt)
+            print("\nUser prompt:", prompt)
 
             response = await self.client.chat.completions.create(
                 model=self.model,

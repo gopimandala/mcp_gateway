@@ -24,25 +24,54 @@ class RelevanceChecker:
         return False, "SQL should return data"
     
     def check_relevance_score(self, user_query: str, sql: str) -> tuple[float, str]:
-        """Simple relevance scoring (can be enhanced with LLM later)"""
-        query_words = set(user_query.lower().split())
-        sql_words = set(sql.lower().split())
+        """Enhanced relevance scoring with semantic matching"""
+        query_lower = user_query.lower()
+        sql_lower = sql.lower()
         
-        # Simple word overlap score
+        # Initialize score
+        score = 0.0
+        
+        # 1. Semantic table matching
+        table_mappings = {
+            "assignment group": "sn_groups",
+            "groups": "sn_groups", 
+            "group": "sn_groups",
+            "incident": "sn_incidents",
+            "incidents": "sn_incidents",
+            "issue": "jira_issues",
+            "issues": "jira_issues",
+            "ticket": "jira_issues",
+            "tickets": "jira_issues",
+            "project": "jira_projects",
+            "projects": "jira_projects",
+            "user": "jira_users",
+            "users": "jira_users"
+        }
+        
+        # Check for semantic table matches
+        for query_term, table_name in table_mappings.items():
+            if query_term in query_lower and table_name in sql_lower:
+                score += 0.5
+                break
+        
+        # 2. Direct word overlap (reduced weight)
+        query_words = set(query_lower.split())
+        sql_words = set(sql_lower.split())
         common_words = query_words.intersection(sql_words)
-        score = len(common_words) / max(len(query_words), 1)
+        score += len(common_words) * 0.1
         
-        # Check if SQL mentions relevant tables
-        relevant_tables = ["jira_issues", "sn_incidents", "jira_users", "sn_users"]
-        table_mentions = sum(1 for table in relevant_tables if table in sql.lower())
+        # 3. Bonus for relevant table mentions
+        relevant_tables = ["jira_issues", "sn_incidents", "jira_users", "sn_users", "jira_projects", "sn_groups"]
+        table_mentions = sum(1 for table in relevant_tables if table in sql_lower)
+        score += table_mentions * 0.2
         
-        # Bonus points for table mentions
-        if table_mentions > 0:
-            score += 0.3
+        # 4. Bonus for proper SQL structure
+        if "select" in sql_lower and "from" in sql_lower:
+            score += 0.1
         
-        # Bonus points for SQL keywords
-        sql_keywords = ["count", "select", "from", "where"]
-        keyword_matches = sum(1 for kw in sql_keywords if kw in sql.lower())
-        score += keyword_matches * 0.1
+        # 5. Bonus for domain-specific keywords
+        if any(word in query_lower for word in ["list", "show", "get", "count"]):
+            if "select" in sql_lower:
+                score += 0.1
         
         return min(score, 1.0), f"Relevance score: {score:.2f}"

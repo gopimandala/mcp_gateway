@@ -26,11 +26,17 @@ def setup_database():
         
         print("🔧 Connected to PostgreSQL")
         
+        # Create schemas
+        create_schemas(cursor, conn)
+        
         print("📝 Populating with sample data...")
         
         # Populate sample data
         populate_jira_data(cursor, conn)
         populate_servicenow_data(cursor, conn)
+        
+        # Populate ServiceNow references for Jira issues
+        populate_snow_references(cursor, conn)
         
         conn.commit()
         cursor.close()
@@ -45,8 +51,79 @@ def setup_database():
         print(f"❌ Error: {e}")
         raise
 
+def create_schemas(cursor, conn):
+    """Create schemas for different domains"""
+    
+    # Create schemas
+    schemas = ['jira', 'servicenow']
+    for schema in schemas:
+        cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    
+    print("✅ Created schemas: jira, servicenow")
+
+def populate_snow_references(cursor, conn):
+    """Populate snow_ref field for 700 out of 1000 Jira issues"""
+    
+    # Get all ServiceNow incident IDs
+    cursor.execute("SELECT incident_id FROM servicenow.sn_incidents ORDER BY incident_id")
+    snow_incidents = [row[0] for row in cursor.fetchall()]
+    
+    # Get all Jira issue IDs
+    cursor.execute("SELECT issue_id, issue_key FROM jira.jira_issues ORDER BY issue_id")
+    jira_issues = cursor.fetchall()
+    
+    # Select 700 random Jira issues to update
+    selected_issues = random.sample(jira_issues, 700)
+    
+    # Assign ServiceNow incident numbers to selected Jira issues
+    for i, (issue_id, issue_key) in enumerate(selected_issues):
+        snow_ref = snow_incidents[i % len(snow_incidents)]  # Cycle through incidents if needed
+        cursor.execute(
+            "UPDATE jira.jira_issues SET snow_ref = %s WHERE issue_id = %s",
+            (snow_ref, issue_id)
+        )
+    
+    print("✅ ServiceNow references populated (700 Jira issues linked)")
+
 def populate_jira_data(cursor, conn):
     """Populate Jira tables with sample data"""
+    
+    # Create Jira tables
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS jira.jira_projects (
+            project_key VARCHAR(10) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            lead VARCHAR(100)
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS jira.jira_users (
+            username VARCHAR(100) PRIMARY KEY,
+            display_name VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE NOT NULL
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS jira.jira_issues (
+            issue_id SERIAL PRIMARY KEY,
+            issue_key VARCHAR(20) UNIQUE NOT NULL,
+            summary VARCHAR(500) NOT NULL,
+            status VARCHAR(50) NOT NULL,
+            priority VARCHAR(20) NOT NULL,
+            issue_type VARCHAR(50) NOT NULL,
+            project_key VARCHAR(10) REFERENCES jira.jira_projects(project_key),
+            assignee VARCHAR(100) REFERENCES jira.jira_users(username),
+            reporter VARCHAR(100) REFERENCES jira.jira_users(username),
+            created_date TIMESTAMP NOT NULL,
+            resolved_date TIMESTAMP,
+            original_estimate_hours INTEGER,
+            time_spent_seconds INTEGER,
+            snow_ref VARCHAR(20)
+        )
+    """)
     
     # Sample data
     projects = ["PROJ", "SUPP", "DEV", "OPS", "SEC"]
@@ -58,7 +135,7 @@ def populate_jira_data(cursor, conn):
     # Insert projects
     for i, project in enumerate(projects):
         cursor.execute("""
-            INSERT INTO jira_projects (project_key, name, description, lead)
+            INSERT INTO jira.jira_projects (project_key, name, description, lead)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (project_key) DO NOTHING
         """, (project, f"Project {project}", f"Description for {project}", users[i % len(users)]))
@@ -66,7 +143,7 @@ def populate_jira_data(cursor, conn):
     # Insert users
     for user in users:
         cursor.execute("""
-            INSERT INTO jira_users (username, display_name, email)
+            INSERT INTO jira.jira_users (username, display_name, email)
             VALUES (%s, %s, %s)
             ON CONFLICT (username) DO NOTHING
         """, (user, user.replace(".", " ").title(), f"{user}@company.com"))
@@ -80,7 +157,7 @@ def populate_jira_data(cursor, conn):
             resolved_date = created_date + timedelta(days=random.randint(1, 30))
         
         cursor.execute("""
-            INSERT INTO jira_issues (
+            INSERT INTO jira.jira_issues (
                 issue_key, summary, status, priority, issue_type,
                 project_key, assignee, reporter, created_date, resolved_date,
                 original_estimate_hours, time_spent_seconds
@@ -105,63 +182,58 @@ def populate_jira_data(cursor, conn):
     print("✅ Jira data populated (1000 issues)")
 
 def populate_servicenow_data(cursor, conn):
-    """Populate ServiceNow tables with sample data"""
+    """Populate ServiceNow table with sample data"""
+    
+    # Drop existing table to recreate with correct schema
+    cursor.execute("DROP TABLE IF EXISTS servicenow.sn_incidents")
+    
+    # Create ServiceNow table
+    cursor.execute("""
+        CREATE TABLE servicenow.sn_incidents (
+            incident_id VARCHAR(20) PRIMARY KEY,
+            summary VARCHAR(500) NOT NULL,
+            description TEXT,
+            status VARCHAR(50) NOT NULL,
+            priority VARCHAR(10) NOT NULL,
+            impact VARCHAR(20) NOT NULL,
+            assigned_group VARCHAR(100) NOT NULL,
+            opened_at TIMESTAMP NOT NULL,
+            resolved_at TIMESTAMP,
+            due_date TIMESTAMP
+        )
+    """)
     
     # Sample data
-    departments = ["IT", "HR", "Finance", "Operations", "Legal"]
     groups = ["IT Support", "Network Team", "Security Team", "Database Team", "Application Team"]
     states = ["New", "In Progress", "On Hold", "Resolved", "Closed", "Canceled"]
     priorities = ["1", "2", "3", "4", "5"]  # 1=Critical, 5=Low
-    categories = ["Hardware", "Software", "Network", "Database", "Security"]
-    
-    # Insert groups
-    for i, group in enumerate(groups):
-        cursor.execute("""
-            INSERT INTO sn_groups (sys_id, name, description)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (sys_id) DO NOTHING
-        """, (f"group_{i}", group, f"Description for {group}"))
-    
-    # Insert users
-    for i, dept in enumerate(departments):
-        for j in range(20):  # 20 users per department
-            user_id = f"user_{i*20 + j:03d}"
-            cursor.execute("""
-                INSERT INTO sn_users (sys_id, user_name, name, email, department)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (sys_id) DO NOTHING
-            """, (user_id, f"user{i*20 + j}", f"User {i*20 + j}", f"user{i*20 + j}@company.com", dept))
+    impacts = ["High", "Medium", "Low"]
     
     # Insert 1000 incidents
     for i in range(1000):
-        incident_number = f"INC{i+1:06d}"
+        incident_id = f"INC{i+1:06d}"
         opened_at = datetime.now() - timedelta(days=random.randint(1, 365))
         resolved_at = None
         if random.random() > 0.4:  # 60% resolved
             resolved_at = opened_at + timedelta(hours=random.randint(1, 72))
         
         cursor.execute("""
-            INSERT INTO sn_incidents (
-                number, sys_id, short_description, description, state, priority,
-                assignment_group, assigned_to, caller_id, opened_at, resolved_at,
-                category, subcategory
+            INSERT INTO servicenow.sn_incidents (
+                incident_id, summary, description, status, priority, impact,
+                assigned_group, opened_at, resolved_at, due_date
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (number) DO NOTHING
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
-            incident_number,
-            f"inc_{i:03d}",
+            incident_id,
             f"Incident {i+1}: {random.choice(['Email', 'VPN', 'Login', 'Server', 'Application'])} issue",
             f"Detailed description for incident {i+1}",
             random.choice(states),
             random.choice(priorities),
-            f"group_{random.randint(0, len(groups)-1)}",
-            f"user_{random.randint(0, 99):03d}",
-            f"user_{random.randint(0, 99):03d}",
+            random.choice(impacts),
+            random.choice(groups),  # Direct group name!
             opened_at,
             resolved_at,
-            random.choice(categories),
-            random.choice(["Subcategory A", "Subcategory B", "Subcategory C"])
+            opened_at + timedelta(days=random.randint(1, 30)) if random.random() > 0.5 else None
         ))
     
     print("✅ ServiceNow data populated (1000 incidents)")
@@ -175,24 +247,28 @@ def show_database_stats():
         print("\n📊 Database Statistics:")
         
         # Jira stats
-        cursor.execute("SELECT COUNT(*) FROM jira_projects")
+        cursor.execute("SELECT COUNT(*) FROM jira.jira_projects")
         print(f"Jira Projects: {cursor.fetchone()[0]}")
         
-        cursor.execute("SELECT COUNT(*) FROM jira_users")
+        cursor.execute("SELECT COUNT(*) FROM jira.jira_users")
         print(f"Jira Users: {cursor.fetchone()[0]}")
         
-        cursor.execute("SELECT COUNT(*) FROM jira_issues")
-        print(f"Jira Issues: {cursor.fetchone()[0]}")
+        cursor.execute("SELECT COUNT(*) FROM jira.jira_issues")
+        jira_count = cursor.fetchone()[0]
+        print(f"Jira Issues: {jira_count}")
+        
+        cursor.execute("SELECT COUNT(*) FROM jira.jira_issues WHERE snow_ref IS NOT NULL")
+        snow_ref_count = cursor.fetchone()[0]
+        print(f"Jira Issues with ServiceNow refs: {snow_ref_count}")
         
         # ServiceNow stats
-        cursor.execute("SELECT COUNT(*) FROM sn_groups")
-        print(f"ServiceNow Groups: {cursor.fetchone()[0]}")
-        
-        cursor.execute("SELECT COUNT(*) FROM sn_users")
-        print(f"ServiceNow Users: {cursor.fetchone()[0]}")
-        
-        cursor.execute("SELECT COUNT(*) FROM sn_incidents")
+        cursor.execute("SELECT COUNT(*) FROM servicenow.sn_incidents")
         print(f"ServiceNow Incidents: {cursor.fetchone()[0]}")
+        
+        cursor.execute("SELECT assigned_group, COUNT(*) FROM servicenow.sn_incidents GROUP BY assigned_group")
+        print("ServiceNow Incidents by group:")
+        for row in cursor.fetchall():
+            print(f"  {row[0]}: {row[1]}")
         
         cursor.close()
         conn.close()
