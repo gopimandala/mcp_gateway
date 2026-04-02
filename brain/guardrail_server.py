@@ -2,6 +2,11 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from transformers import pipeline
 
+# --- brain configuration ---
+from config import brain_settings
+
+print('This will take a minute or two to download the model...')
+
 app = FastAPI()
 
 # Load once at startup
@@ -39,3 +44,7 @@ def check_text(req: InputText):
         "safe": safe,
         "scores": scores
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("guardrail_server:app", host="0.0.0.0", port=brain_settings.guardrail_port, reload=True)

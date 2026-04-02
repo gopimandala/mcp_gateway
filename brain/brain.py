@@ -6,11 +6,16 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import os
 
+# --- load environment ---
 load_dotenv()
-OPENAI_KEY = os.getenv("OPENAI_KEY")
+
+# --- brain configuration ---
+from config import brain_settings
+
+OPENAI_KEY = brain_settings.openai_key
 client = OpenAI(api_key=OPENAI_KEY)
 
-MCP_GATEWAY_URL = "http://localhost:8000/api/jira"
+MCP_GATEWAY_URL = brain_settings.mcp_gateway_url
 TOOLS_URL = f"{MCP_GATEWAY_URL}/api/jira/tools"
 
 # fetch tools dynamically
@@ -30,8 +35,8 @@ async def run_brain(user_request: str):
     tools_json = json.dumps(tools)
     print("Tools received by brain:", tools)
 
-    system_prompt = load_prompt("brain/system_prompt.md")
-    user_prompt_template = load_prompt("brain/user_prompt.md")
+    system_prompt = load_prompt("system_prompt.md")
+    user_prompt_template = load_prompt("user_prompt.md")
     user_prompt = user_prompt_template.format(user_request=user_request, tools_json=tools_json)
 
     resp = client.chat.completions.create(
@@ -83,7 +88,7 @@ async def execute_plan(plan, tools_list):
 
 # main
 async def main():
-    user_request = "Check KAN-30 and comment that it will be done in the next 4 hours"
+    user_request = "Check KAN-30 and comment that it will be done in the next 4.5 hours"
     plan_tools = await run_brain(user_request)
     if plan_tools:
         plan, tools = plan_tools

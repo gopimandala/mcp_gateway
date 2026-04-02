@@ -2,7 +2,8 @@
 import asyncio
 import json
 import aiohttp
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -10,14 +11,18 @@ import os
 
 # --- load environment ---
 load_dotenv()
-OPENAI_KEY = os.getenv("OPENAI_KEY")
+
+# --- brain configuration ---
+from config import brain_settings
+
+OPENAI_KEY = brain_settings.openai_key
 client = OpenAI(api_key=OPENAI_KEY)
 
 # --- guardrail config ---
-GUARDRAIL_URL = "http://localhost:9090/check"
+GUARDRAIL_URL = f"http://localhost:{brain_settings.guardrail_port}/check"
 
 # --- MCP/Kong config ---
-MCP_GATEWAY_URL = "http://localhost:8000"
+MCP_GATEWAY_URL = brain_settings.mcp_gateway_url
 TOOLS_URL = f"{MCP_GATEWAY_URL}/api/jira/tools"
 
 # --- FastAPI app ---
@@ -117,7 +122,7 @@ async def run_brain_endpoint(req: BrainRequest):
     guardrail_result = await check_guardrail(req.user_request)
 
     if not guardrail_result["safe"]:
-        return {
+        response_data = {
             "plan": [],
             "execution_results": [
                 {
@@ -127,11 +132,15 @@ async def run_brain_endpoint(req: BrainRequest):
                 }
             ]
         }
+        return Response(
+            content=json.dumps(response_data, indent=2),
+            media_type="application/json"
+        )
 
     plan, tools, message = await run_brain(req.user_request)
     # If LLM returned a normal message (guardrail/refusal)
     if message:
-        return {
+        response_data = {
             "plan": [],
             "execution_results": [
                 {
@@ -140,8 +149,16 @@ async def run_brain_endpoint(req: BrainRequest):
                 }
             ]
         }
+        return Response(
+            content=json.dumps(response_data, indent=2),
+            media_type="application/json"
+        )
     if not plan:
-        return {"plan": [], "execution_results": [], "message": "No actions generated"}
+        response_data = {"plan": [], "execution_results": [], "message": "No actions generated"}
+        return Response(
+            content=json.dumps(response_data, indent=2),
+            media_type="application/json"
+        )
 
     results = []
 
@@ -157,7 +174,13 @@ async def run_brain_endpoint(req: BrainRequest):
     
     print("Brain server step output:", mcp_results[i])
 
-    return {"plan": plan, "execution_results": results}
+    response_data = {"plan": plan, "execution_results": results}
+    return Response(
+        content=json.dumps(response_data, indent=2),
+        media_type="application/json"
+    )
 
-# Run with:
-# uvicorn brain_server:app --host 0.0.0.0 --port 9000
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("brain_server:app", host="0.0.0.0", port=brain_settings.brain_port, reload=True)

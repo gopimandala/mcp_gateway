@@ -43,23 +43,35 @@ cp .env.example .env
 #### Option 1: MCP Server
 ```bash
 python src/main.py
-# Runs on port 8020
+# Runs on port configured by MCP_PORT (default: 8020)
 # For: MCP clients (Claude Desktop, MCP-compatible AI assistants)
 ```
 
 #### Option 2: HTTP Wrapper
 ```bash
 python src/main_http_wrapper.py
-# Runs on port 8021
+# Runs on port configured by HTTP_WRAPPER_PORT (default: 8021)
 # For: HTTP clients (web apps, mobile apps, testing with curl/Postman)
 ```
 
 #### Option 3: Brain Server (AI Orchestration)
 ```bash
 cd brain
+cp .env.example .env
+# Edit brain/.env with your OpenAI key and ports
 python brain_server.py
-# Runs on port 8000
+# Runs on port configured by BRAIN_PORT (default: 8000)
 # For: AI-powered orchestration and natural language interfaces
+```
+
+#### Option 4: Guardrail Server (Content Safety)
+```bash
+cd brain
+cp .env.example .env
+# Edit brain/.env with your configuration
+python guardrail_server.py
+# Runs on port configured by GUARDRAIL_PORT (default: 9090)
+# For: Content safety and toxicity checking
 ```
 
 ## Environment Variables
@@ -67,6 +79,10 @@ python brain_server.py
 Create a `.env` file in the root directory:
 
 ```bash
+# Server Ports Configuration
+HTTP_WRAPPER_PORT=8080
+MCP_PORT=8020
+
 # Jira Configuration
 JIRA_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@company.com
@@ -83,23 +99,35 @@ LANGCHAIN_PROJECT=mcp-multi-gateway
 OPENAI_KEY=your-openai-api-key
 ```
 
+**Brain Services Configuration**
+
+Create a separate `brain/.env` file for brain services:
+
+```bash
+# Brain Services Configuration
+BRAIN_PORT=8000
+GUARDRAIL_PORT=9090
+MCP_GATEWAY_URL=http://localhost:8080
+OPENAI_KEY=your-openai-api-key
+```
+
 **Security Note**: Never commit actual API keys to version control. Use environment variables or secure secret management.
 
 ## Core Components
 
 ### 1. MCP Server (`src/main.py`)
 - **Purpose**: Primary MCP protocol server
-- **Port**: 8020
+- **Port**: Configured by `MCP_PORT` (default: 8020)
 - **Features**: Tool registration, service lifecycle management
 
 ### 2. HTTP Wrapper (`src/main_http_wrapper.py`)
 - **Purpose**: REST API interface for MCP tools
-- **Port**: 8021
+- **Port**: Configured by `HTTP_WRAPPER_PORT` (default: 8021)
 - **Features**: HTTP endpoints mirroring MCP tools
 
 ### 3. Brain Server (`brain/brain_server.py`)
 - **Purpose**: AI-powered orchestration and planning
-- **Port**: 8000
+- **Port**: Configured by `BRAIN_PORT` (default: 8000)
 - **Features**: LLM-based tool selection and execution planning
 
 ### 4. Integration Services (`src/integrations/`)

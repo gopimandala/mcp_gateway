@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from src.api.jira.jira_http_wrapper import create_jira_router
 from src.integrations.jira.service import JiraService
 from src.integrations.jira.client import JiraClient
+from src.core.config import settings
 
 load_dotenv()
 
@@ -36,4 +37,4 @@ app.include_router(jira_router, prefix="/api/jira", tags=["jira"])
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("src.main_http_wrapper:app", host="0.0.0.0", port=8021, reload=True)
+    uvicorn.run("src.main_http_wrapper:app", host="0.0.0.0", port=settings.http_wrapper_port, reload=True)

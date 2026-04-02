@@ -1,23 +1,23 @@
 _format_version: "3.0"
 
 services:
-  - name: my-service
-    url: http://httpbin.org
-    plugins:
-      - name: rate-limiting
-        config:
-          minute: 5
-          hour: 100
+  # - name: my-service
+  #   url: http://httpbin.org
+  #   plugins:
+  #     - name: rate-limiting
+  #       config:
+  #         minute: 5
+  #         hour: 100
 
   - name: jira-service
-    url: http://172.17.0.1:8020
+    url: http://172.17.0.1:${MCP_PORT:-8020}
     # plugins:
     #   - name: request-size-limiting
     #     config:
     #       allowed_payload_size: 1
 
   - name: jira-proxy-service
-    url: http://172.17.0.1:8021
+    url: http://172.17.0.1:${HTTP_WRAPPER_PORT:-8080}
     plugins:
     - name: pre-function
       config:
@@ -25,7 +25,7 @@ services:
         - |
           local body = kong.request.get_raw_body()
           if body and string.find(string.lower(body), "delete") then
-            return kong.response.exit(403, { message = "Blocked by Kong policy" })
+            return kong.response.exit(403, "Blocked by Kong policy\n", { ["Content-Type"] = "text/plain" })
           end
     # plugins:
     #   - name: request-size-limiting
@@ -33,10 +33,10 @@ services:
     #       allowed_payload_size: 10
 
 routes:
-  - name: my-route
-    service: my-service
-    paths:
-      - /my-api
+  # - name: my-route
+  #   service: my-service
+  #   paths:
+  #     - /my-api
 
   - name: jira-route
     service: jira-service

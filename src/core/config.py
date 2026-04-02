@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # LangChain/LangSmith
     langchain_project: str = "mcp-multi-gateway"
     
+    # Server Settings
+    http_wrapper_port: int = 8080
+    host: str = "0.0.0.0"
+    
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
